@@ -1,0 +1,280 @@
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_PCD8544.h>
+
+// Declare LCD object for software SPI
+// Adafruit_PCD8544(CLK,DIN,D/C,CE,RST);
+Adafruit_PCD8544 display = Adafruit_PCD8544(7, 6, 5, 4, 3);
+
+
+const int analogInPin = A1;  // Analog input pin that the potentiometer is attached to
+const int buttonPin = A0;    // Button pin
+const int pump  = A4;        // pump pin
+const int valv  = A3;        // electrovan 1
+const int valv2 = A2;         // electrovan 2 de la pompe
+
+int sensorValue = 0;        // value read from the pressure sensor via the amplifier stage
+float outputValue = 0;      // value output to the Serial port and LCD display
+float presPicSys[50], presPicDis;
+float pres1 = 0, pres2 = 0, res = 0, dif = 0, timer, pulse;
+int i = 0, j = 0, cmp = 0;
+int buttonState = 0;
+String etatS, etatD;
+int cheak = 0, sysPicValue = 0,  presValue = 170;
+bool isItTrue = false, firstTimeCheak = false;
+unsigned long firstTime, lastTime  ;
+
+void setup()
+{
+  Serial.begin(9600);       // initialize serial communications at 9600 bps:
+  //Initialize Display
+  display.begin();
+
+  // you can change the contrast around to adapt the display for the best viewing!
+  display.setContrast(50);
+
+  // Clear the buffer.
+  display.clearDisplay();
+
+  pinMode(buttonPin, INPUT);
+  pinMode(pump, OUTPUT);
+  pinMode(valv, OUTPUT);
+  pinMode(valv2, OUTPUT);
+  pinMode(analogInPin, INPUT);
+
+}
+
+void loop()
+{
+  /************************************************************ Initialisation ******************************************************************/
+  buttonState = digitalRead(buttonPin);               // read the button state
+
+  sensorValue = analogRead(analogInPin);              // read the analog in value:
+  outputValue = map(sensorValue, 9, 538, 20, 280);   // convert the value of the sensor
+
+
+
+  if (buttonState == 0) {
+
+    cheak = 0;
+    presValue = 170;
+    isItTrue = false;
+    firstTimeCheak = false;
+    if (outputValue <= 25) {
+oneMoreTest:
+
+      i = 0; j = 0; pres1 = 0; pres2 = 0; dif = 0; presPicDis = 0;
+      sysPicValue = 0;
+
+      analogWrite(valv, 1023);
+      digitalWrite(valv2, HIGH);
+
+      while (outputValue <= 170) {
+        sensorValue = analogRead(analogInPin);              // read the analog in value:
+        outputValue = map(sensorValue, 9, 538, 20, 280);
+        analogWrite(pump, 1023);
+        Serial.print(outputValue);
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(BLACK);
+        display.setCursor(0, 0);
+        display.println(outputValue);
+        display.display();
+      }
+
+      if (outputValue >= 160) {
+        analogWrite(pump, 0);
+        analogWrite(valv, 0);
+        pres1 = sensorValue;
+        delay(100);
+        pres2 = sensorValue;
+      }
+      /************************************************************ Traitment ******************************************************************/
+      while (outputValue >= 25) {
+
+
+        sensorValue = analogRead(analogInPin);              // read the analog in value:
+        outputValue = map(sensorValue, 9, 538, 20, 280);
+
+        Serial.print(sensorValue);
+        Serial.print("\t ");
+        Serial.println(outputValue);
+
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(BLACK);
+
+        display.print("SYS :");
+        if (presPicSys[0] > 0) {
+          display.println(presPicSys[0]);
+          display.display();
+        } else {
+          display.println(outputValue);
+          display.display();
+        }
+
+        display.print("\nDIAS :");
+        if (presPicDis > 0) {
+          display.println(presPicDis);
+          display.display();
+        } else {
+          display.println(outputValue);
+          display.display();
+        }
+        display.println(outputValue);
+        display.display();
+
+        if (outputValue <= 52) {
+          digitalWrite(valv2, LOW);
+
+        }
+
+        res = pres2 - pres1;
+
+        if (res > dif) {
+          dif = res;
+        }
+
+        if (res > (dif * 0.6)) {
+          presPicSys[i] = map(sensorValue, 9, 538, 20, 280);
+          i++;
+          if (firstTimeCheak == false) {
+            firstTime = millis();
+            firstTimeCheak = true;
+          }
+        }
+
+        if (res >= (dif * 0.89)) {
+          presPicDis = map(sensorValue, 9, 538, 20, 280);
+          j++;
+          lastTime = millis();
+        }
+
+        pres1 = pres2;
+        delay(100);
+        pres2 = analogRead(analogInPin);
+
+      }
+
+      if (presPicSys[0] > 140 ) {
+        etatS = "Hypertension";
+        //Serial.print(etat);
+      } else if (presPicSys[0] > 130) {
+        etatS = "High normal";
+        //Serial.print(etat);
+      } else if (presPicSys[0] > 120) {
+        etatS = "Normal";
+        //Serial.print(etat);
+      } else if (presPicSys[0] > 90) {
+        etatS = "Optimal";
+      } else {
+        etatS = "Low";
+      }
+
+
+
+      cmp = 0;
+
+      timer = lastTime - firstTime ;
+      timer = timer / 1000;
+      timer = timer / 60;
+      for (int h = 0; h <= 50; h++) {
+        if (presPicSys[h] >= presPicDis) {
+          cmp++;
+        }
+      }
+      pulse = cmp / timer;
+
+      if (presPicDis > 90 ) {
+        etatD = "Hypertension";
+        //Serial.print(etat);
+      } else if (presPicDis > 85) {
+        etatD = "High normal";
+        //Serial.print(etat);
+      } else if (presPicDis > 80) {
+        etatD = "Normal";
+        //Serial.print(etat);
+      } else if (presPicDis > 60) {
+        etatD = "Optimal";
+      } else {
+        etatD = "Low";
+      }
+
+
+      if (presPicSys[0] < 100) {
+
+        isItTrue = true;
+      }
+      if (presPicSys[0] > 145) {
+        presValue = 190;
+        isItTrue = true;
+      }
+      if (presPicDis < 55) {
+        isItTrue = true;
+      }
+      if (presPicDis > 90) {
+        isItTrue = true;
+      }
+      if (isItTrue = true) {
+        if (cheak = 0) {
+          cheak++;
+          goto oneMoreTest;
+
+        }
+      }
+
+      /************************************************************ show ******************************************************************/
+
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(BLACK);
+      display.setCursor(0, 0);
+      Serial.print("presser pic SYS :");
+      display.print("SYS :");
+      Serial.print(presPicSys[0]);
+      display.println(presPicSys[0]);
+      display.setTextColor(WHITE, BLACK);
+      display.println(etatS);
+      Serial.print("\t**************************************** ");
+
+
+      display.setTextColor(BLACK);
+      Serial.print("presser pic DIAS :");
+      display.print("DIAS :");
+      Serial.print(presPicDis);
+      display.println(presPicDis);
+      display.setTextColor(WHITE, BLACK);
+      display.println(etatD);
+
+      display.setTextColor(BLACK);
+      Serial.println("\t *********** . compt ");
+      Serial.println(cmp);
+      Serial.println(timer);
+      Serial.println(lastTime);
+      Serial.println(firstTime);
+      Serial.println("Pulse/min :");
+      display.print("Pul/min ");
+      Serial.println(pulse);
+      display.println(pulse);
+      display.display();
+      delay(10000);
+      /************************************************************ end ******************************************************************/
+
+    } else {
+      Serial.print("\tDeflate the air");
+      digitalWrite(valv2, LOW);
+      Serial.print(outputValue);
+    }
+  } else {
+    Serial.print("\tpress the start button");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(BLACK);
+    display.setCursor(0, 0);
+    display.println("Press start");
+    display.print("button");
+    display.display();
+  }
+
+}
